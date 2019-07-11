@@ -171,8 +171,6 @@ def assert_graphs_equal(mg1, mg2):
             del data1["json_key"]
         assert data == data1
 
-
-@pytest.mark.xfail
 def test_json_tuple_in_pandas():
     s = pd.Series()
     s["test"] = [(1, 2), (3, 4)]

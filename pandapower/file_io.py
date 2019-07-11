@@ -114,12 +114,12 @@ def to_json(net, filename=None):
 
     """
     if filename is None:
-        return json.dumps(net, cls=PPJSONEncoder, indent=2)
+        return json.dumps(net, cls=PPJSONEncoder)
     if hasattr(filename, 'write'):
-        json.dump(net, fp=filename, cls=PPJSONEncoder, indent=2)
+        json.dump(net, fp=filename, cls=PPJSONEncoder)
     else:
         with open(filename, "w") as fp:
-            json.dump(net, fp=fp, cls=PPJSONEncoder, indent=2)
+            json.dump(net, fp=fp, cls=PPJSONEncoder)
 
 
 def to_sql(net, con, include_results=True):

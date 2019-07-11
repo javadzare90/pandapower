@@ -271,14 +271,31 @@ def pp_hook(d):
                 d[key] = pp_hook(d[key])
 
         if class_name == 'Series':
-            return pd.read_json(obj, precise_float=True, **d)
+            if isinstance(obj, str):
+                return pd.read_json(obj, precise_float=True, **d)
+            else:
+                return pd.Series(data=obj, dtype=d["dtype"], index=d["index"])
+#                df.index = pd.Index(d["index"], dtype='int64')
+#                return df.astype(d["dtype"])
+
         elif class_name == "DataFrame":
-            df = pd.read_json(obj, precise_float=True, **d)
-            try:
-                df.set_index(df.index.astype(numpy.int64), inplace=True)
-            except (ValueError, TypeError, AttributeError):
-                logger.debug("failed setting int64 index")
-            return df
+            if isinstance(obj, str):
+                df = pd.read_json(obj, precise_float=True, **d)
+                try:
+                    df.set_index(df.index.astype(numpy.int64), inplace=True)
+                except (ValueError, TypeError, AttributeError):
+                    logger.debug("failed setting int64 index")
+                return df
+            else:
+                df = pd.DataFrame.from_dict(data=obj)
+                df.index = pd.Index(d["index"], dtype='int64')
+                for item, dtype in d["dtype"].items():
+                    if df.dtypes.at[item] != dtype:
+                        try:
+                            df[item] = df[item].astype(dtype)
+                        except ValueError:
+                            df[item] = df[item].astype(float)
+                return df
         elif GEOPANDAS_INSTALLED and class_name == 'GeoDataFrame':
             df = gpd.GeoDataFrame.from_features(fiona.Collection(obj), crs=d['crs'])
             if "id" in df:
@@ -409,9 +426,8 @@ def json_net(obj):
 @to_serializable.register(pd.DataFrame)
 def json_dataframe(obj):
     logger.debug('DataFrame')
-    d = with_signature(obj, obj.to_json(orient='split',
-                                        default_handler=to_serializable, double_precision=15))
-    d.update({'dtype': obj.dtypes.astype('str').to_dict(), 'orient': 'split'})
+    d = with_signature(obj, obj.to_dict("list"))
+    d.update({'dtype': obj.dtypes.astype('str').to_dict(), 'index': obj.index.tolist()})
     return d
 
 
@@ -428,8 +444,8 @@ if GEOPANDAS_INSTALLED:
 @to_serializable.register(pd.Series)
 def json_series(obj):
     logger.debug('Series')
-    d = with_signature(obj, obj.to_json(orient='split', default_handler=to_serializable))
-    d.update({'dtype': str(obj.dtypes), 'orient': 'split', 'typ': 'series'})
+    d = with_signature(obj, obj.to_dict())
+    d.update({"dtype": obj.dtype, "index": obj.index.tolist()})
     return d
 
 
@@ -451,6 +467,10 @@ def json_npfloat(obj):
     logger.debug("floating")
     return float(obj)
 
+@to_serializable.register(numpy.bool_)
+def json_npbool(obj):
+    logger.debug("bool")
+    return bool(obj)
 
 @to_serializable.register(numbers.Number)
 def json_num(obj):
