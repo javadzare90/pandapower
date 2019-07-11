@@ -426,8 +426,11 @@ def json_net(obj):
 @to_serializable.register(pd.DataFrame)
 def json_dataframe(obj):
     logger.debug('DataFrame')
-    d = with_signature(obj, obj.to_dict("list"))
-    d.update({'dtype': obj.dtypes.astype('str').to_dict(), 'index': obj.index.tolist()})
+    def to_dict(df):
+        return {name: df[name].values.tolist() for name in df.columns}
+    
+    d = with_signature(obj, to_dict(obj))
+    d.update({'dtype': obj.dtypes.astype('str').to_dict(), 'index': obj.index.values.tolist()})
     return d
 
 
