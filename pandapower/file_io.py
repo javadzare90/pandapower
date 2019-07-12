@@ -97,7 +97,7 @@ def to_excel(net, filename, include_empty_tables=False, include_results=True):
         table.to_excel(writer, sheet_name=item)
     writer.save()
 
-def to_json(net, filename=None):
+def to_json(net, filename=None, include_empty_tables=False, include_results=True, indent=None):
     """
         Saves a pandapower Network in JSON format. The index columns of all pandas DataFrames will
         be saved in ascending order. net elements which name begins with "_" (internal elements)
@@ -113,14 +113,17 @@ def to_json(net, filename=None):
              >>> pp.to_json(net, "example.json")
 
     """
+    from pandapower.io_utils import json_net
+    net_dict = json_net(net)
     if filename is None:
-        return json.dumps(net, cls=PPJSONEncoder)
+        return json.dumps(net_dict, cls=PPJSONEncoder, indent=indent)
     if hasattr(filename, 'write'):
-        json.dump(net, fp=filename, cls=PPJSONEncoder)
+        json.dump(net_dict, fp=filename, cls=PPJSONEncoder, indent=indent)
     else:
         with open(filename, "w") as fp:
-            json.dump(net, fp=fp, cls=PPJSONEncoder)
+            json.dump(net_dict, fp=fp, cls=PPJSONEncoder, indent=indent)
 
+    
 
 def to_sql(net, con, include_results=True):
     dodfs = to_dict_of_dfs(net, include_results=include_results)

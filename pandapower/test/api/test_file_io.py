@@ -43,15 +43,9 @@ def test_excel(net_in, tempdir):
 def test_json_basic(net_in, tempdir):
     # tests the basic json functionality with the encoder/decoder classes
     filename = os.path.join(tempdir, "testfile.json")
-    with open(filename, 'w') as fp:
-        json.dump(net_in, fp, cls=PPJSONEncoder)
-
-    with open(filename) as fp:
-        net_out = json.load(fp, cls=PPJSONDecoder)
-        pp.convert_format(net_out)
-
+    pp.to_json(net_in, filename, include_empty_tables=True)
+    net_out = pp.from_json(filename)
     assert_net_equal(net_in, net_out)
-
 
 def test_json(net_in, tempdir):
     filename = os.path.join(tempdir, "testfile.json")
@@ -69,7 +63,7 @@ def test_json(net_in, tempdir):
                 geometry = net_geo[tab].coords.apply(LineString)
             net_geo[tab] = gpd.GeoDataFrame(net_geo[tab], geometry=geometry, crs=from_epsg(4326))
 
-        pp.to_json(net_geo, filename)
+        pp.to_json(net_geo, filename, include_empty_tables=True)
         net_out = pp.from_json(filename)
         assert_net_equal(net_geo, net_out)
     except (NameError, ImportError):
@@ -78,7 +72,7 @@ def test_json(net_in, tempdir):
     # check if restore_all_dtypes works properly:
     net_in.line['test'] = 123
     net_in.res_line['test'] = 123
-    pp.to_json(net_in, filename)
+    pp.to_json(net_in, filename, include_empty_tables=True)
     net_out = pp.from_json(filename)
     assert_net_equal(net_in, net_out)
 
@@ -152,9 +146,8 @@ def test_json_encoding_decoding():
     assert net.tuple == net1.tuple
     assert np.allclose(a, a1)
 
-    # TODO line_geodata isn't the same since tuples inside DataFrames are converted to lists (see test_json_tuple_in_dataframe)
-    assert pp.nets_equal(net, net1, exclude_elms=["line_geodata"])
-    assert pp.nets_equal(d["a"], d1["a"], exclude_elms=["line_geodata"])
+    assert pp.nets_equal(net, net1)
+    assert pp.nets_equal(d["a"], d1["a"])
     assert d["b"] == d1["b"]
     assert_graphs_equal(net.mg, net1.mg)
 
@@ -180,4 +173,5 @@ def test_json_tuple_in_pandas():
 
 
 if __name__ == "__main__":
+#    test_json_tuple_in_pandas()
     pytest.main(["test_file_io.py", "-x"])

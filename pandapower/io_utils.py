@@ -287,9 +287,11 @@ def pp_hook(d):
                     logger.debug("failed setting int64 index")
                 return df
             else:
+                index = obj.pop("index")
+                dtypes = obj.pop("dtypes")
                 df = pd.DataFrame.from_dict(data=obj)
-                df.index = pd.Index(d["index"], dtype='int64')
-                for item, dtype in d["dtype"].items():
+                df.index = pd.Index(index, dtype='int64')
+                for item, dtype in dtypes.items():
                     if df.dtypes.at[item] != dtype:
                         try:
                             df[item] = df[item].astype(dtype)
@@ -297,16 +299,34 @@ def pp_hook(d):
                             df[item] = df[item].astype(float)
                 return df
         elif GEOPANDAS_INSTALLED and class_name == 'GeoDataFrame':
-            df = gpd.GeoDataFrame.from_features(fiona.Collection(obj), crs=d['crs'])
-            if "id" in df:
-                df.set_index(df['id'].values.astype(numpy.int64), inplace=True)
-            # coords column is not handled properly when using from_features
-            if 'coords' in df:
-                # df['coords'] = df.coords.apply(json.loads)
-                valid_coords = ~pd.isnull(df.coords)
-                df.loc[valid_coords, 'coords'] = df.loc[valid_coords, "coords"].apply(json.loads)
-            df = df.reindex(columns=d['columns'])
-            return df
+            if isinstance(obj, str): #backwards compatibility
+                df = gpd.GeoDataFrame.from_features(fiona.Collection(obj), crs=d['crs'])
+                if "id" in df:
+                    df.set_index(df['id'].values.astype(numpy.int64), inplace=True)
+                # coords column is not handled properly when using from_features
+                if 'coords' in df:
+                    # df['coords'] = df.coords.apply(json.loads)
+                    valid_coords = ~pd.isnull(df.coords)
+                    df.loc[valid_coords, 'coords'] = df.loc[valid_coords, "coords"].apply(json.loads)
+                df = df.reindex(columns=d['columns'])
+                return df
+            else:
+                index = obj.pop("index")
+                dtypes = obj.pop("dtypes")
+                crs = obj.pop("crs")
+                df = gpd.GeoDataFrame.from_features(obj, crs=crs)
+#                for name, col in obj.items():
+#                    if isinstance(col, dict):
+#                        obj[name] = shapely.geometry.shape(col)
+#                df = gpd.GeoDataFrame.from_dict(data=obj)
+                df.crs = crs
+                for item, dtype in dtypes.items():
+                    if df.dtypes.at[item] != dtype:
+                        try:
+                            df[item] = df[item].astype(dtype)
+                        except ValueError:
+                            df[item] = df[item].astype(float)
+                return df
         elif SHAPELY_INSTALLED and module_name == "shapely":
             return shapely.geometry.shape(obj)
         elif class_name == "pandapowerNet":
@@ -417,31 +437,76 @@ def to_serializable(obj):
 
 
 @to_serializable.register(pandapowerNet)
-def json_net(obj):
-    net_dict = {k: item for k, item in obj.items() if not k.startswith("_")}
-    d = with_signature(obj, net_dict)
+def json_net(obj, include_empty_tables=False, include_results=True):
+    net_dict = {}
+    for k, item in obj.items():
+        if k.startswith("_"):
+            continue
+        elif isinstance(item, pd.DataFrame):
+            if not include_results and k.startswith("res"):
+                continue
+            elif not include_empty_tables and len(item) == 0:
+                continue
+            elif GEOPANDAS_INSTALLED and isinstance(item, gpd.GeoDataFrame):
+                net_dict[k] = json_geodataframe(item)
+            else:
+                net_dict[k] = json_dataframe(item)
+        elif isinstance(item, pd.Series):
+            net_dict[k] = json_series(item)
+        else:
+            net_dict[k] = item
+    d = with_signature(net_dict, net_dict, obj_module="pandapower", obj_class="pandapowerNet")
     return d
 
 
 @to_serializable.register(pd.DataFrame)
 def json_dataframe(obj):
     logger.debug('DataFrame')
-    def to_dict(df):
-        return {name: df[name].values.tolist() for name in df.columns}
-    
-    d = with_signature(obj, to_dict(obj))
-    d.update({'dtype': obj.dtypes.astype('str').to_dict(), 'index': obj.index.values.tolist()})
-    return d
+    df_dict = {name: obj[name].values.tolist() for name in obj.columns}
+    df_dict["dtypes"] = obj.dtypes.astype('str').to_dict()
+    df_dict["index"] = obj.index.values.tolist()
+    return with_signature(obj, df_dict)
+
+
+def list_tuple_conversion(i):
+    if isinstance(i, dict):
+        return tuple_to_list_in_dict(i)
+    elif hasattr(i, "item"):
+        return i.item()
+    elif isinstance(i, tuple):
+        return tuple_to_list(i)
+    else:
+        return i
+
+def tuple_to_list(obj):
+    return [list_tuple_conversion(i) for i in obj]
+
+def tuple_to_list_in_dict(obj):
+    for key, item in obj.items():
+        if isinstance(item, tuple) or isinstance(item, list):
+            obj[key] = tuple_to_list(item)
+        elif isinstance(item, dict):
+            obj[key] = tuple_to_list_in_dict(item)
+    return obj
 
 
 if GEOPANDAS_INSTALLED:
     @to_serializable.register(gpd.GeoDataFrame)
     def json_geodataframe(obj):
-        logger.debug('GeoDataFrame')
-        d = with_signature(obj, obj.to_json())
-        d.update({'dtype': obj.dtypes.astype('str').to_dict(),
-                  'crs': obj.crs, 'columns': obj.columns})
-        return d
+        df_dict = tuple_to_list_in_dict(obj._to_geo())
+#        logger.debug('GeoDataFrame')
+#        df_dict = {}
+#        for name in obj.columns:
+#            column = obj[name]
+#            if isinstance(column, gpd.GeoSeries):
+#                df_dict[name] = tuple_to_list_in_dict(column.__geo_interface__)#[shapely.geometry.mapping(i) for i in column.values]
+#            else:
+#                df_dict[name] = column.values.tolist()
+        df_dict["dtypes"] = obj.dtypes.astype('str').to_dict()
+        df_dict["index"] = obj.index.values.tolist()
+        df_dict['crs'] = obj.crs
+        return with_signature(obj, df_dict)
+
 
 
 @to_serializable.register(pd.Series)
