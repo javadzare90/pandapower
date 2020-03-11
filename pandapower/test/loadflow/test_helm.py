@@ -16,7 +16,7 @@ def test_helm_nr_comparison():
     pp.runpp(net, "nr")
     nr = net.res_bus
     
-    pp.runpp(net, "helm", max_iteration=100)
+    pp.runpp(net, "helm")
     helm = net.res_bus
 
     diff = (nr-helm).abs().max()
@@ -27,4 +27,6 @@ def test_helm_nr_comparison():
     assert diff.q_mvar < 0.1
 
 if __name__ == '__main__':
-    test_helm_nr_comparison()
+    net = nw.case11_iwamoto()  
+    pp.runpp(net, "helm", max_iteration=100)
+#    test_helm_nr_comparison()

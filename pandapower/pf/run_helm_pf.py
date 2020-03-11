@@ -4,15 +4,17 @@
 # and Energy System Technology (IEE), Kassel. All rights reserved.
 
 
-from time import time
-from numpy import ones, conj, nonzero, any, exp, pi, hstack, real, concatenate, angle
+from numpy import concatenate, angle
 from scipy.sparse import csr_matrix
 
-from pandapower.pypower.idx_brch import F_BUS, T_BUS, BR_R, BR_X, BR_B, BR_STATUS, SHIFT, TAP, BR_R_ASYM, BR_X_ASYM
 from pandapower.pypower.idx_bus import GS, BS, VM, VA
-from pandapower.pf.ppci_variables import _store_results_from_pf_in_ppci
-from pandapower.pf.run_newton_raphson_pf import _get_numba_functions, _get_pf_variables_from_ppci, _get_Y_bus, _get_Sbus, ppci_to_pfsoln, _store_internal
-from pandapower.pypower.makeYbus import branch_vectors
+from pandapower.pf.ppci_variables import _store_results_from_pf_in_ppci, \
+                                         _get_pf_variables_from_ppci
+from pandapower.pf.run_newton_raphson_pf import _get_numba_functions, \
+                                                _get_Y_bus, \
+                                                _get_Sbus, \
+                                                ppci_to_pfsoln, \
+                                                _store_internal
 
 try:
     import pplog as logging
@@ -25,7 +27,7 @@ logger = logging.getLogger(__name__)
 def _run_helm_pf(ppci, options):
     from GridCal.Engine.Simulations.PowerFlow.helm_power_flow import helm_josep
     """
-    Runs a Newton-Raphson power flow.
+    Runs a HELM power flow through GridCal.
 
     INPUT
     ppci (dict) - the "internal" ppc (without out ot service elements and sorted elements)
@@ -54,8 +56,7 @@ def _run_helm_pf(ppci, options):
     max_iter=options["max_iteration"]
     V, success, norm_f, Scalc, iterations, et = helm_josep(Ybus=Ybus, V0=V0, 
                                pq=pq, pv=pv, sl=ref, Ysh0=Ysh, Yseries=Yseries,
-                               S0=Sbus, pqpv=pvpq, max_coeff=max_iter,
-                               tolerance=1e-8)
+                               S0=Sbus, pqpv=pvpq, max_coeff=max_iter)
     ppci["bus"][:, VM] = abs(V)
     ppci["bus"][:, VA] = angle(V)
     ppci = _store_internal(ppci, {"bus": bus, "gen": gen, "branch": branch,
