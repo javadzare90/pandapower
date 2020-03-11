@@ -679,7 +679,8 @@ def _init_runpp_options(net, algorithm, calculate_voltage_angles, init,
             if any(a in line_buses for a in hv_buses):
                 calculate_voltage_angles = True
 
-    default_max_iteration = {"nr": 10, "iwamoto_nr": 10, "bfsw": 100, "gs": 10000, "fdxb": 30, "fdbx": 30}
+    default_max_iteration = {"nr": 10, "iwamoto_nr": 10, "bfsw": 100, 
+                             "gs": 10000, "fdxb": 30, "fdbx": 30, "helm": 30}
     if max_iteration == "auto":
         max_iteration = default_max_iteration[algorithm]
 
