@@ -41,51 +41,21 @@ def _run_helm_pf(ppci, options):
     # compute complex bus power injections [generation - load]
     Sbus = _get_Sbus(ppci, options["recycle"])
 
-    pvpq = concatenate([pv, pq])
-    pvpq.sort()
     ## constants
     nb = bus.shape[0]  ## number of buses
-    nl = branch.shape[0]  ## number of lines
-    
-    ## for each branch, compute the elements of the branch admittance matrix where
-    ##
-    ##      | If |   | Yff  Yft |   | Vf |
-    ##      |    | = |          | * |    |
-    ##      | It |   | Ytf  Ytt |   | Vt |
-    ##
-    Ytt, Yff, Yft, Ytf = branch_vectors(branch, nl)
-    ## compute shunt admittance
-    ## if Psh is the real power consumed by the shunt at V = 1.0 p.u.
-    ## and Qsh is the reactive power injected by the shunt at V = 1.0 p.u.
-    ## then Psh - j Qsh = V * conj(Ysh * V) = conj(Ysh) = Gs - j Bs,
-    ## i.e. Ysh = Psh + j Qsh, so ...
-    ## vector of shunt admittances
-    Ysh = (bus[:, GS] + 1j * bus[:, BS]) / baseMVA
-    
-    ## build connection matrices
-    f = real(branch[:, F_BUS]).astype(int)  ## list of "from" buses
-    t = real(branch[:, T_BUS]).astype(int)  ## list of "to" buses
-    ## connection matrix for line & from buses
-    Cf = csr_matrix((ones(nl), (range(nl), f)), (nl, nb))
-    ## connection matrix for line & to buses
-    Ct = csr_matrix((ones(nl), (range(nl), t)), (nl, nb))
-    
-    ## build Yf and Yt such that Yf * V is the vector of complex branch currents injected
-    ## at each branch's "from" bus, and Yt is the same for the "to" bus end
-    i = hstack([range(nl), range(nl)])  ## double set of row indices
-    
-    Yf = csr_matrix((hstack([Yff, Yft]), (i, hstack([f, t]))), (nl, nb))
-    Yt = csr_matrix((hstack([Ytf, Ytt]), (i, hstack([f, t]))), (nl, nb))
-    # Yf = spdiags(Yff, 0, nl, nl) * Cf + spdiags(Yft, 0, nl, nl) * Ct
-    # Yt = spdiags(Ytf, 0, nl, nl) * Cf + spdiags(Ytt, 0, nl, nl) * Ct
-    
+
     ## build Ybus
-    Ybus = Cf.T * Yf + Ct.T * Yt + \
-           csr_matrix((Ysh, (range(nb), range(nb))), (nb, nb))
-    Yseries = Cf.T * Yf + Ct.T * Yt
+    Ysh = (bus[:, GS] + 1j * bus[:, BS]) / baseMVA
+    Yseries = Ybus - csr_matrix((Ysh, (range(nb), range(nb))), (nb, nb))
+
+    pvpq = concatenate([pv, pq])
+    pvpq.sort()
+
+    max_iter=options["max_iteration"]
     V, success, norm_f, Scalc, iterations, et = helm_josep(Ybus=Ybus, V0=V0, 
                                pq=pq, pv=pv, sl=ref, Ysh0=Ysh, Yseries=Yseries,
-                               S0=Sbus, pqpv=pvpq, max_coeff=100, tolerance=1e-8)
+                               S0=Sbus, pqpv=pvpq, max_coeff=max_iter,
+                               tolerance=1e-8)
     ppci["bus"][:, VM] = abs(V)
     ppci["bus"][:, VA] = angle(V)
     ppci = _store_internal(ppci, {"bus": bus, "gen": gen, "branch": branch,

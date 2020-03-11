@@ -8,15 +8,23 @@ Created on Tue Mar 10 18:01:40 2020
 import pandapower as pp
 import pandapower.networks as nw
 
-net = nw.case2869pegase()
 
-net.bus.sort_index(inplace=True)
-net.line.sort_index(inplace=True)
+def test_helm_nr_comparison():
 
-pp.runpp(net)
-nr = net.res_bus
+    net = nw.case2869pegase()
+    
+    pp.runpp(net, "nr")
+    nr = net.res_bus
+    
+    pp.runpp(net, "helm", max_iteration=100)
+    helm = net.res_bus
 
-pp.runpp(net, "helm")
-helm = net.res_bus
+    diff = (nr-helm).abs().max()
+    
+    #TODO: these tolerances are not yet good enough
+    assert diff.vm_pu < 1e-4
+    assert diff.p_mw < 0.1
+    assert diff.q_mvar < 0.1
 
-print((helm-nr).abs().sum())
+if __name__ == '__main__':
+    test_helm_nr_comparison()
